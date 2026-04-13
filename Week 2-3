@@ -1,1 +1,132 @@
+import pandas as pd
+import os
 
+# ======================
+# 0. Set output directory
+output_dir = '/Users/yangzewen/Desktop/IDX Intern/Week 2-3'
+os.makedirs(output_dir, exist_ok=True)
+
+# ======================
+# 1. Load datasets (Week 1 outputs)
+sold = pd.read_csv('/Users/yangzewen/Desktop/IDX Intern/Week 1/Final_Sold.csv')
+listed = pd.read_csv('/Users/yangzewen/Desktop/IDX Intern/Week 1/Final_Listed.csv')
+
+print("Datasets loaded successfully")
+
+# ======================
+# 2. Inspect dataset structure (Handbook required)
+print("\nColumns in SOLD dataset:")
+print(sold.columns)
+
+print("\nFirst 5 rows of SOLD dataset:")
+print(sold.head())
+
+print("\nColumns in LISTED dataset:")
+print(listed.columns)
+
+print("\nFirst 5 rows of LISTED dataset:")
+print(listed.head())
+
+# ======================
+# 3. Check PropertyType categories
+print("\nUnique Property Types (SOLD):")
+print(sold['PropertyType'].unique())
+
+print("\nUnique Property Types (LISTED):")
+print(listed['PropertyType'].unique())
+
+# ======================
+# 4. Filter Residential properties
+sold = sold[sold['PropertyType'] == 'Residential']
+listed = listed[listed['PropertyType'] == 'Residential']
+
+print("\nAfter filtering Residential:")
+print("Sold shape:", sold.shape)
+print("Listed shape:", listed.shape)
+
+# ======================
+# 5. Missing value analysis (with flag)
+def missing_report(df, name):
+    # Calculate missing values
+    missing_count = df.isnull().sum()
+    missing_percent = (missing_count / len(df)) * 100
+
+    # Create report DataFrame
+    report = pd.DataFrame({
+        'missing_count': missing_count,
+        'missing_percent': missing_percent
+    })
+
+    # ⭐ Flag columns with >90% missing
+    report['flag_90pct_missing'] = report['missing_percent'] > 90
+
+    # Sort by missing percentage
+    report = report.sort_values(by='missing_percent', ascending=False)
+
+    print(f"\n=== Missing Value Report: {name} ===")
+    print(report.head(20))
+
+    print("\nColumns flagged (>90% missing):")
+    print(report[report['flag_90pct_missing']])
+
+    return report
+
+# Generate reports
+missing_sold = missing_report(sold, "Sold")
+missing_listed = missing_report(listed, "Listed")
+
+# ⭐ Save missing reports to CSV
+missing_sold.to_csv(f'{output_dir}/Sold_missing_report.csv')
+missing_listed.to_csv(f'{output_dir}/Listed_missing_report.csv')
+
+# ======================
+# 6. Numeric distribution summary
+def numeric_summary(df, column):
+    print(f"\n=== Summary Statistics for {column} ===")
+    print(df[column].describe(percentiles=[0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]))
+
+# Required fields
+numeric_summary(sold, 'ClosePrice')
+numeric_summary(sold, 'LivingArea')
+numeric_summary(sold, 'DaysOnMarket')
+
+# ======================
+# 7. Fetch mortgage rate data from FRED
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US"
+mortgage = pd.read_csv(url, parse_dates=['observation_date'])
+mortgage.columns = ['date', 'rate_30yr_fixed']
+
+# ======================
+# 8. Convert weekly data to monthly averages
+mortgage['year_month'] = mortgage['date'].dt.to_period('M')
+
+mortgage_monthly = (
+    mortgage.groupby('year_month')['rate_30yr_fixed']
+    .mean()
+    .reset_index()
+)
+
+# ======================
+# 9. Create matching keys for merge
+sold['CloseDate'] = pd.to_datetime(sold['CloseDate'])
+sold['year_month'] = sold['CloseDate'].dt.to_period('M')
+
+listed['ListingContractDate'] = pd.to_datetime(listed['ListingContractDate'])
+listed['year_month'] = listed['ListingContractDate'].dt.to_period('M')
+
+# ======================
+# 10. Merge mortgage data
+sold = sold.merge(mortgage_monthly, on='year_month', how='left')
+listed = listed.merge(mortgage_monthly, on='year_month', how='left')
+
+# ======================
+# 11. Validate merge results
+print("\nMissing mortgage rates in SOLD:", sold['rate_30yr_fixed'].isnull().sum())
+print("Missing mortgage rates in LISTED:", listed['rate_30yr_fixed'].isnull().sum())
+
+# ======================
+# 12. Save final datasets
+sold.to_csv(f'{output_dir}/Sold_Processed.csv', index=False)
+listed.to_csv(f'{output_dir}/Listed_Processed.csv', index=False)
+
+print("\n✅ Week 2–3 processing completed successfully")
