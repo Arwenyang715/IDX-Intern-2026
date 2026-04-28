@@ -1,0 +1,164 @@
+# ======================================
+# Week 4–5: Data Cleaning (Sold + Listed)
+# ======================================
+
+import pandas as pd
+
+# -------------------------------
+# Step 1: Load Data (from Week 2-3)
+# -------------------------------
+sold = pd.read_csv("Week 2-3/Sold_Processed.csv")
+listed = pd.read_csv("Week 2-3/Listed_Processed.csv")
+
+print("Sold original shape:", sold.shape)
+print("Listed original shape:", listed.shape)
+
+# ======================================
+# CLEAN SOLD DATASET
+# ======================================
+
+# -------------------------------
+# Convert Date Columns
+# -------------------------------
+date_cols = [
+    'CloseDate',
+    'PurchaseContractDate',
+    'ListingContractDate',
+    'ContractStatusChangeDate'
+]
+
+for col in date_cols:
+    if col in sold.columns:
+        sold[col] = pd.to_datetime(sold[col], errors='coerce')
+
+# -------------------------------
+# Remove Invalid Values
+# -------------------------------
+sold = sold[
+    (sold['ClosePrice'] > 0) &
+    (sold['LivingArea'] > 0) &
+    (sold['DaysOnMarket'] >= 0)
+]
+
+# -------------------------------
+# Timeline Logic Flags
+# -------------------------------
+sold['listing_after_close_flag'] = (
+    sold['ListingContractDate'] > sold['CloseDate']
+)
+
+sold['purchase_after_close_flag'] = (
+    sold['PurchaseContractDate'] > sold['CloseDate']
+)
+
+sold['negative_timeline_flag'] = (
+    sold['PurchaseContractDate'] < sold['ListingContractDate']
+)
+
+# -------------------------------
+# Geographic Flags
+# -------------------------------
+sold['missing_coord_flag'] = (
+    sold['Latitude'].isnull() |
+    sold['Longitude'].isnull()
+)
+
+sold['zero_coord_flag'] = (
+    (sold['Latitude'] == 0) |
+    (sold['Longitude'] == 0)
+)
+
+sold['invalid_longitude_flag'] = (
+    sold['Longitude'] > 0
+)
+
+# -------------------------------
+# Missing Value Handling
+# -------------------------------
+missing_pct_sold = sold.isnull().mean() * 100
+high_missing_cols_sold = missing_pct_sold[missing_pct_sold > 90].index.tolist()
+
+print("Sold columns dropped (>90% missing):", high_missing_cols_sold)
+
+sold = sold.drop(columns=high_missing_cols_sold)
+
+print("Sold cleaned shape:", sold.shape)
+
+
+# ======================================
+# CLEAN LISTED DATASET
+# ======================================
+
+# -------------------------------
+# Convert Date Columns
+# -------------------------------
+for col in date_cols:
+    if col in listed.columns:
+        listed[col] = pd.to_datetime(listed[col], errors='coerce')
+
+# -------------------------------
+# Remove Invalid Values
+# -------------------------------
+listed = listed[
+    (listed['LivingArea'] > 0) &
+    (listed['DaysOnMarket'] >= 0)
+]
+
+# -------------------------------
+# Timeline Logic (simplified)
+# -------------------------------
+if 'PurchaseContractDate' in listed.columns and 'ListingContractDate' in listed.columns:
+    listed['negative_timeline_flag'] = (
+        listed['PurchaseContractDate'] < listed['ListingContractDate']
+    )
+
+# -------------------------------
+# Geographic Flags
+# -------------------------------
+listed['missing_coord_flag'] = (
+    listed['Latitude'].isnull() |
+    listed['Longitude'].isnull()
+)
+
+listed['zero_coord_flag'] = (
+    (listed['Latitude'] == 0) |
+    (listed['Longitude'] == 0)
+)
+
+listed['invalid_longitude_flag'] = (
+    listed['Longitude'] > 0
+)
+
+# -------------------------------
+# Missing Value Handling
+# -------------------------------
+missing_pct_listed = listed.isnull().mean() * 100
+high_missing_cols_listed = missing_pct_listed[missing_pct_listed > 90].index.tolist()
+
+print("Listed columns dropped (>90% missing):", high_missing_cols_listed)
+
+listed = listed.drop(columns=high_missing_cols_listed)
+
+print("Listed cleaned shape:", listed.shape)
+
+
+# ======================================
+# Step 8: Summary
+# ======================================
+print("\n--- SOLD FLAG SUMMARY ---")
+print("Listing after close:", sold['listing_after_close_flag'].sum())
+print("Purchase after close:", sold['purchase_after_close_flag'].sum())
+print("Negative timeline:", sold['negative_timeline_flag'].sum())
+
+print("\n--- LISTED FLAG SUMMARY ---")
+if 'negative_timeline_flag' in listed.columns:
+    print("Negative timeline:", listed['negative_timeline_flag'].sum())
+
+
+# ======================================
+# Step 9: Save Cleaned Datasets
+# ======================================
+sold.to_csv("Week 4-5/Sold_Cleaned.csv", index=False)
+listed.to_csv("Week 4-5/Listed_Cleaned.csv", index=False)
+
+print("\nAll datasets cleaned and saved to Week 4-5 folder.")
