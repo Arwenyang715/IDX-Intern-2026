@@ -1,0 +1,211 @@
+import pandas as pd
+
+sold = pd.read_csv("/Users/yangzewen/Desktop/IDX Intern/Week 6/Week6_Sold_Feature_Engineered.csv")
+listed = pd.read_csv("/Users/yangzewen/Desktop/IDX Intern/Week 6/Week6_Listed_Feature_Engineered.csv")
+
+print("Sold original shape:", sold.shape)
+print("Listed original shape:", listed.shape)
+
+# %% [markdown]
+# 2. Select Key Numeric Fields
+
+# %%
+numeric_cols = ["ClosePrice", "LivingArea", "DaysOnMarket"]
+
+print(sold[numeric_cols].describe())
+
+# %% [markdown]
+# 3. Define IQR Outlier Detection Function
+
+# %%
+def add_iqr_flags(df, numeric_cols):
+    df = df.copy()
+    iqr_summary = []
+
+    for col in numeric_cols:
+        if col in df.columns:
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+
+            flag_col = col + "_outlier_flag"
+            df[flag_col] = ((df[col] < lower_bound) | (df[col] > upper_bound)).astype(int)
+
+            iqr_summary.append({
+                "column": col,
+                "Q1": Q1,
+                "Q3": Q3,
+                "IQR": IQR,
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound,
+                "outlier_count": df[flag_col].sum(),
+                "outlier_percentage": df[flag_col].mean() * 100
+            })
+
+    iqr_summary = pd.DataFrame(iqr_summary)
+
+    return df, iqr_summary
+
+# %% [markdown]
+# ## 4. Apply IQR Flags
+# 
+# the IQR boundaries and the number of outliers detected for each numeric field
+
+# %%
+sold_flagged, sold_iqr_summary = add_iqr_flags(sold, numeric_cols)
+listed_flagged, listed_iqr_summary = add_iqr_flags(listed, numeric_cols)
+
+print("Sold IQR Summary:")
+display(sold_iqr_summary)
+
+print("Listed IQR Summary:")
+display(listed_iqr_summary)
+
+# %% [markdown]
+# ## 5. Add Business Rule Flags
+
+# %%
+def add_business_rule_flags(df):
+    df = df.copy()
+
+    df["invalid_ClosePrice_flag"] = (df["ClosePrice"] <= 0).astype(int)
+    df["invalid_LivingArea_flag"] = (df["LivingArea"] <= 0).astype(int)
+    df["invalid_DaysOnMarket_flag"] = (df["DaysOnMarket"] < 0).astype(int)
+
+    return df
+
+sold_flagged = add_business_rule_flags(sold_flagged)
+listed_flagged = add_business_rule_flags(listed_flagged)
+
+# %% [markdown]
+# ## 6. Create Combined Outlier or Invalid Flag
+# 
+
+# %%
+flag_cols = [
+    "ClosePrice_outlier_flag",
+    "LivingArea_outlier_flag",
+    "DaysOnMarket_outlier_flag",
+    "invalid_ClosePrice_flag",
+    "invalid_LivingArea_flag",
+    "invalid_DaysOnMarket_flag"
+]
+
+sold_flagged["any_outlier_or_invalid_flag"] = sold_flagged[flag_cols].sum(axis=1)
+listed_flagged["any_outlier_or_invalid_flag"] = listed_flagged[flag_cols].sum(axis=1)
+
+print(sold_flagged["any_outlier_or_invalid_flag"].value_counts().sort_index())
+print(listed_flagged["any_outlier_or_invalid_flag"].value_counts().sort_index())
+
+# %% [markdown]
+# ## 7. Create Filtered Clean Datasets
+
+# %%
+sold_filtered = sold_flagged[sold_flagged["any_outlier_or_invalid_flag"] == 0].copy()
+listed_filtered = listed_flagged[listed_flagged["any_outlier_or_invalid_flag"] == 0].copy()
+
+print("Sold rows before filtering:", len(sold_flagged))
+print("Sold rows after filtering:", len(sold_filtered))
+print("Sold rows removed:", len(sold_flagged) - len(sold_filtered))
+
+print("Listed rows before filtering:", len(listed_flagged))
+print("Listed rows after filtering:", len(listed_filtered))
+print("Listed rows removed:", len(listed_flagged) - len(listed_filtered))
+
+# %% [markdown]
+# ## 8. Sample Output Table
+
+# %%
+sample_cols = [
+    "PropertyType",
+    "CountyOrParish",
+    "ClosePrice",
+    "LivingArea",
+    "DaysOnMarket",
+    "ClosePrice_outlier_flag",
+    "LivingArea_outlier_flag",
+    "DaysOnMarket_outlier_flag",
+    "invalid_ClosePrice_flag",
+    "invalid_LivingArea_flag",
+    "invalid_DaysOnMarket_flag",
+    "any_outlier_or_invalid_flag"
+]
+
+sold_sample_output = sold_flagged[[col for col in sample_cols if col in sold_flagged.columns]].head(20)
+listed_sample_output = listed_flagged[[col for col in sample_cols if col in listed_flagged.columns]].head(20)
+
+print("Sold sample output:")
+display(sold_sample_output)
+
+print("Listed sample output:")
+display(listed_sample_output)
+
+# %% [markdown]
+# ## 9. Before and After Comparison
+
+# %%
+comparison_summary = pd.DataFrame({
+    "dataset": ["Sold", "Listed"],
+    "rows_before_filtering": [len(sold_flagged), len(listed_flagged)],
+    "rows_after_filtering": [len(sold_filtered), len(listed_filtered)],
+    "rows_removed": [
+        len(sold_flagged) - len(sold_filtered),
+        len(listed_flagged) - len(listed_filtered)
+    ],
+    "percent_removed": [
+        (len(sold_flagged) - len(sold_filtered)) / len(sold_flagged) * 100,
+        (len(listed_flagged) - len(listed_filtered)) / len(listed_flagged) * 100
+    ],
+    "median_ClosePrice_before": [
+        sold_flagged["ClosePrice"].median(),
+        listed_flagged["ClosePrice"].median()
+    ],
+    "median_ClosePrice_after": [
+        sold_filtered["ClosePrice"].median(),
+        listed_filtered["ClosePrice"].median()
+    ],
+    "median_LivingArea_before": [
+        sold_flagged["LivingArea"].median(),
+        listed_flagged["LivingArea"].median()
+    ],
+    "median_LivingArea_after": [
+        sold_filtered["LivingArea"].median(),
+        listed_filtered["LivingArea"].median()
+    ],
+    "median_DaysOnMarket_before": [
+        sold_flagged["DaysOnMarket"].median(),
+        listed_flagged["DaysOnMarket"].median()
+    ],
+    "median_DaysOnMarket_after": [
+        sold_filtered["DaysOnMarket"].median(),
+        listed_filtered["DaysOnMarket"].median()
+    ]
+})
+
+display(comparison_summary)
+
+# %% [markdown]
+# ## 10. Save Week 7 Output Files
+
+# %%
+sold_flagged.to_csv("Week7_Sold_Flagged_Full_Dataset.csv", index=False)
+sold_filtered.to_csv("Week7_Sold_Filtered_Clean_Dataset.csv", index=False)
+sold_iqr_summary.to_csv("Week7_Sold_IQR_Summary.csv", index=False)
+sold_sample_output.to_csv("Week7_Sold_Sample_Output_Table.csv", index=False)
+
+listed_flagged.to_csv("Week7_Listed_Flagged_Full_Dataset.csv", index=False)
+listed_filtered.to_csv("Week7_Listed_Filtered_Clean_Dataset.csv", index=False)
+listed_iqr_summary.to_csv("Week7_Listed_IQR_Summary.csv", index=False)
+listed_sample_output.to_csv("Week7_Listed_Sample_Output_Table.csv", index=False)
+
+comparison_summary.to_csv("Week7_Before_After_Comparison.csv", index=False)
+
+print("Files saved successfully.")
+
+# %% [markdown]
+# ## 11. Written Summary
+
+
