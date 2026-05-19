@@ -1,0 +1,143 @@
+import pandas as pd
+import numpy as np
+
+sold = pd.read_csv("/Users/yangzewen/Desktop/IDX Intern/Week 4-5/Sold_Cleaned.csv")
+listed = pd.read_csv("/Users/yangzewen/Desktop/IDX Intern/Week 4-5/Listed_Cleaned.csv")
+
+date_cols_sold = [
+    "CloseDate",
+    "PurchaseContractDate",
+    "ListingContractDate",
+    "ContractStatusChangeDate"
+]
+
+for col in date_cols_sold:
+    if col in sold.columns:
+        sold[col] = pd.to_datetime(sold[col], errors="coerce")
+
+date_cols_listed = [
+    "ListingContractDate",
+    "ContractStatusChangeDate",
+    "PurchaseContractDate",
+    "CloseDate"
+]
+
+for col in date_cols_listed:
+    if col in listed.columns:
+        listed[col] = pd.to_datetime(listed[col], errors="coerce")
+
+sold["price_ratio"] = sold["ClosePrice"] / sold["OriginalListPrice"]
+sold["close_to_original_list_ratio"] = sold["ClosePrice"] / sold["OriginalListPrice"]
+sold["price_per_sqft"] = sold["ClosePrice"] / sold["LivingArea"]
+sold["days_on_market"] = sold["DaysOnMarket"]
+sold["year"] = sold["CloseDate"].dt.year
+sold["month"] = sold["CloseDate"].dt.month
+sold["YrMo"] = sold["CloseDate"].dt.to_period("M").astype(str)
+
+sold["listing_to_contract_days"] = (
+    sold["PurchaseContractDate"] - sold["ListingContractDate"]
+).dt.days
+
+sold["contract_to_close_days"] = (
+    sold["CloseDate"] - sold["PurchaseContractDate"]
+).dt.days
+
+listed["year"] = listed["ListingContractDate"].dt.year
+listed["month"] = listed["ListingContractDate"].dt.month
+listed["YrMo"] = listed["ListingContractDate"].dt.to_period("M").astype(str)
+
+if "OriginalListPrice" in listed.columns and "LivingArea" in listed.columns:
+    listed["list_price_per_sqft"] = listed["OriginalListPrice"] / listed["LivingArea"]
+
+if "PurchaseContractDate" in listed.columns:
+    listed["listing_to_contract_days"] = (
+        listed["PurchaseContractDate"] - listed["ListingContractDate"]
+    ).dt.days
+
+sold.replace([np.inf, -np.inf], np.nan, inplace=True)
+listed.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+sample_cols = [
+    "CloseDate",
+    "ClosePrice",
+    "OriginalListPrice",
+    "LivingArea",
+    "price_ratio",
+    "close_to_original_list_ratio",
+    "price_per_sqft",
+    "days_on_market",
+    "year",
+    "month",
+    "YrMo",
+    "listing_to_contract_days",
+    "contract_to_close_days"
+]
+
+sample_cols = [col for col in sample_cols if col in sold.columns]
+sample_output = sold[sample_cols].head(20)
+
+county_summary = sold.groupby("CountyOrParish").agg(
+    number_of_sales=("ClosePrice", "count"),
+    median_close_price=("ClosePrice", "median"),
+    average_close_price=("ClosePrice", "mean"),
+    median_price_per_sqft=("price_per_sqft", "median"),
+    average_days_on_market=("days_on_market", "mean"),
+    median_price_ratio=("price_ratio", "median"),
+    median_listing_to_contract_days=("listing_to_contract_days", "median"),
+    median_contract_to_close_days=("contract_to_close_days", "median")
+).reset_index()
+
+county_summary = county_summary.sort_values(
+    by="number_of_sales",
+    ascending=False
+)
+
+property_type_summary = sold.groupby("PropertyType").agg(
+    number_of_sales=("ClosePrice", "count"),
+    median_close_price=("ClosePrice", "median"),
+    average_close_price=("ClosePrice", "mean"),
+    median_price_per_sqft=("price_per_sqft", "median"),
+    average_days_on_market=("days_on_market", "mean"),
+    median_price_ratio=("price_ratio", "median")
+).reset_index()
+
+print("=== Week 6 Sample Output Table ===")
+print(sample_output.head(20))
+
+print("\n=== County Summary Table ===")
+print(county_summary.head(20))
+
+print("\n=== Property Type Summary Table ===")
+print(property_type_summary)
+
+sold.to_csv("Week6_Sold_Feature_Engineered.csv", index=False)
+listed.to_csv("Week6_Listed_Feature_Engineered.csv", index=False)
+sample_output.to_csv("Week6_Sample_Output_Table.csv", index=False)
+county_summary.to_csv("Week6_County_Summary.csv", index=False)
+property_type_summary.to_csv("Week6_PropertyType_Summary.csv", index=False)
+
+print("\nWeek 6 feature engineering completed.")
+print("Saved files:")
+print("Week6_Sold_Feature_Engineered.csv")
+print("Week6_Listed_Feature_Engineered.csv")
+print("Week6_Sample_Output_Table.csv")
+print("Week6_County_Summary.csv")
+print("Week6_PropertyType_Summary.csv")
+
+county_summary = sold.groupby("CountyOrParish").agg(
+    number_of_sales=("ClosePrice", "count"),
+    median_close_price=("ClosePrice", "median"),
+    average_close_price=("ClosePrice", "mean"),
+    median_price_per_sqft=("price_per_sqft", "median"),
+    average_days_on_market=("DaysOnMarket", "mean"),
+    median_price_ratio=("price_ratio", "median")
+).reset_index()
+
+county_summary = county_summary.sort_values(
+    by="number_of_sales",
+    ascending=False
+)
+
+print(county_summary.head(10))
+
+county_summary.to_csv("Week6_County_Summary.csv", index=False)
